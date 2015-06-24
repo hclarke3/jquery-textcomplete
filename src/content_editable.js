@@ -33,14 +33,27 @@
         newSubstr = newSubstr[0];
       }
       pre = pre.replace(strategy.match, newSubstr);
-      range.selectNodeContents(range.startContainer);
-      range.deleteContents();
-      var node = document.createTextNode(pre + post);
-      range.insertNode(node);
-      range.setStart(node, pre.length);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
+
+      // allow insertion of html elements
+      if (this.el.isContentEditable) {
+        range.selectNodeContents(range.startContainer);
+        range.deleteContents();
+
+        var dummy = document.createElement('span');
+        dummy.innerHTML = '&nbsp;';
+        range.insertNode(dummy);
+
+        var node = range.createContextualFragment(pre + post);
+        range.insertNode(node);
+        range.setStartAfter(dummy);
+        range.collapse(true);
+
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+          this.$el.val(pre + post);
+          this.el.selectionStart = this.el.selectionEnd = pre.length;
+      }
     },
 
     // Private methods
