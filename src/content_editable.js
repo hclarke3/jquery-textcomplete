@@ -43,8 +43,22 @@
         dummy.innerHTML = '&nbsp;';
         range.insertNode(dummy);
 
-        var node = range.createContextualFragment(pre + post);
+        var fullText = pre + post;
+        var elIdx = fullText.indexOf(newSubstr);
+
+        // insertNode places nodes at the beginning of the range,
+        // so insert everything after the new node first
+        var postElTextNode = document.createTextNode(fullText.substr(elIdx + fullText.length + 1));
+        range.insertNode(postElTextNode);
+
+        // insert the new node
+        var node = range.createContextualFragment(newSubstr);
         range.insertNode(node);
+
+        // insert everything before the new node
+        var preElTextNode = document.createTextNode(fullText.substr(0, elIdx));
+        range.insertNode(preElTextNode);
+
         range.setStartAfter(dummy);
         range.collapse(true);
 
