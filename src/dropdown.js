@@ -1,6 +1,8 @@
 +function ($) {
   'use strict';
 
+  var $window = $(window);
+
   var include = function (zippedData, datum) {
     var i, elem;
     var idProperty = datum.strategy.idProperty
@@ -41,7 +43,7 @@
   //
   // element - Textarea or contenteditable element.
   function Dropdown(element, completer, option) {
-    this.$el       = Dropdown.findOrCreateElement(option);
+    this.$el       = Dropdown.createElement(option);
     this.completer = completer;
     this.id        = completer.id + 'dropdown';
     this._data     = []; // zipped data.
@@ -52,7 +54,7 @@
     if (option.listPosition) { this.setPosition = option.listPosition; }
     if (option.height) { this.$el.height(option.height); }
     var self = this;
-    $.each(['maxCount', 'placement', 'footer', 'header', 'className'], function (_i, name) {
+    $.each(['maxCount', 'placement', 'footer', 'header', 'noResultsMessage', 'className'], function (_i, name) {
       if (option[name] != null) { self[name] = option[name]; }
     });
     this._bindEvents(element);
@@ -63,18 +65,19 @@
     // Class methods
     // -------------
 
-    findOrCreateElement: function (option) {
+    createElement: function (option) {
       var $parent = option.appendTo;
       if (!($parent instanceof $)) { $parent = $($parent); }
-      var $el = $parent.children('.dropdown-menu')
-      if (!$el.length) {
-        $el = $('<ul class="dropdown-menu"></ul>').css({
+      var $el = $('<ul></ul>')
+        .addClass('dropdown-menu textcomplete-dropdown')
+        .attr('id', 'textcomplete-dropdown-' + option._oid)
+        .css({
           display: 'none',
           left: 0,
           position: 'absolute',
           zIndex: option.zIndex
-        }).appendTo($parent);
-      }
+        })
+        .appendTo($parent);
       return $el;
     }
   });
@@ -117,9 +120,12 @@
         this._renderFooter(unzippedData);
         if (contentsHtml) {
           this._renderContents(contentsHtml);
+          this._fitToBottom();
           this._activateIndexedItem();
         }
         this._setScroll();
+      } else if (this.noResultsMessage) {
+        this._renderNoResultsMessage(unzippedData);
       } else if (this.shown) {
         this.deactivate();
       }
@@ -150,7 +156,7 @@
       this.$el.html('');
       this.data = [];
       this._index = 0;
-      this._$header = this._$footer = null;
+      this._$header = this._$footer = this._$noResultsMessage = null;
     },
 
     activate: function () {
@@ -205,13 +211,15 @@
     _data:    null,  // Currently shown zipped data.
     _index:   null,
     _$header: null,
+    _$noResultsMessage: null,
     _$footer: null,
 
     // Private methods
     // ---------------
 
     _bindEvents: function () {
-      this.$el.on('mousedown.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this))
+      this.$el.on('mousedown.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this));
+      this.$el.on('touchstart.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this));
       this.$el.on('mouseover.' + this.id, '.textcomplete-item', $.proxy(this._onMouseover, this));
       this.$inputEl.on('keydown.' + this.id, $.proxy(this._onKeydown, this));
     },
@@ -228,7 +236,12 @@
       var self = this;
       // Deactive at next tick to allow other event handlers to know whether
       // the dropdown has been shown or not.
-      setTimeout(function () { self.deactivate(); }, 0);
+      setTimeout(function () {
+        self.deactivate();
+        if (e.type === 'touchstart') {
+          self.$inputEl.focus();
+        }
+      }, 0);
     },
 
     // Activate hovered item.
@@ -385,7 +398,7 @@
         index = this.data.length;
         this.data.push(datum);
         html += '<li class="textcomplete-item" data-index="' + index + '"><a>';
-        html +=   datum.strategy.template(datum.value);
+        html +=   datum.strategy.template(datum.value, datum.term);
         html += '</a></li>';
       }
       return html;
@@ -411,11 +424,29 @@
       }
     },
 
+    _renderNoResultsMessage: function (unzippedData) {
+      if (this.noResultsMessage) {
+        if (!this._$noResultsMessage) {
+          this._$noResultsMessage = $('<li class="textcomplete-no-results-message"></li>').appendTo(this.$el);
+        }
+        var html = $.isFunction(this.noResultsMessage) ? this.noResultsMessage(unzippedData) : this.noResultsMessage;
+        this._$noResultsMessage.html(html);
+      }
+    },
+
     _renderContents: function (html) {
       if (this._$footer) {
         this._$footer.before(html);
       } else {
         this.$el.append(html);
+      }
+    },
+
+    _fitToBottom: function() {
+      var windowScrollBottom = $window.scrollTop() + $window.height();
+      var height = this.$el.height();
+      if ((this.$el.position().top + height) > windowScrollBottom) {
+        this.$el.offset({top: windowScrollBottom - height});
       }
     },
 

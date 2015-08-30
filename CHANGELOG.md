@@ -1,5 +1,31 @@
 # Changelog
 
+## `0.7.3` - Aug 27, 2015.
+- Add `Strategy#el` and `Strategy#$el` which returns current input/textarea element and corresponding jquery object respectively..
+
+## `0.7.2` - Aug 26, 2015.
+- [#170] Reset \_term after selected. (thanks for [@icharlie](https://github.com/icharlie))
+
+## `0.7.1` - Aug 19, 2015.
+- Remove RTL support because of some bugs.
+
+## `0.7.0` - Jul 2, 2015.
+- [#179] Add support for a "no results" message like the header/footer. (thanks for [@wbinnssmith](https://github.com/wbinnssmith))
+- [#177] Yield the search term to the template function. (thanks for [@wbinnssmith](https://github.com/wbinnssmith))
+- Stop sharing a dropdown element.
+- [#167] Add amd wrapper. (thanks for [@Mavrin](https://github.com/Mavrin))
+- [#163] Added touch devices support. (thanks for [@corvis](https://github.com/corvis))
+
+## `v0.6.1` - Jun 30, 2015.
+- Fix bug that Dropdown.\_fitToBottom does not consider window scroll
+
+## `v0.6.0` - Jun 30, 2015.
+- Now dropdown elements have "textcomplete-dropdown" class.
+
+## `v0.5.2` - Jun 29, 2015.
+
+- [#172] Keep dropdown list in browser window. (thanks for [@kambayashia](https://github.com/kambayashia))
+
 ## `v0.5.1` - Jun 8, 2015.
 
 - Now a replace function is invoked with a user event.

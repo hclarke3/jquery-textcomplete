@@ -1,3 +1,16 @@
+(function (factory) {
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof module === "object" && module.exports) {
+    var $ = require('jquery');
+    module.exports = factory($);
+  } else {
+    // Browser globals
+    factory(jQuery);
+  }
+}(function (jQuery) {
+
 /*!
  * jQuery.textcomplete
  *
@@ -17,13 +30,18 @@ if (typeof jQuery === 'undefined') {
     if (console.warn) { console.warn(message); }
   };
 
+  var id = 1;
+
   $.fn.textcomplete = function (strategies, option) {
     var args = Array.prototype.slice.call(arguments);
     return this.each(function () {
+      var self = this;
       var $this = $(this);
       var completer = $this.data('textComplete');
       if (!completer) {
-        completer = new $.fn.textcomplete.Completer(this, option || {});
+        option || (option = {});
+        option._oid = id++;  // unique object id
+        completer = new $.fn.textcomplete.Completer(this, option);
         $this.data('textComplete', completer);
       }
       if (typeof strategies === 'string') {
@@ -45,7 +63,10 @@ if (typeof jQuery === 'undefined') {
             }
           });
         });
-        completer.register($.fn.textcomplete.Strategy.parse(strategies));
+        completer.register($.fn.textcomplete.Strategy.parse(strategies, {
+          el: self,
+          $el: $this
+        }));
       }
     });
   };
@@ -230,6 +251,7 @@ if (typeof jQuery === 'undefined') {
     // strategy - The Strategy object.
     // e        - Click or keydown event object.
     select: function (value, strategy, e) {
+      this._term = null;
       this.adapter.select(value, strategy, e);
       this.fire('change').fire('textComplete:select', value, strategy);
       this.adapter.focus();
@@ -268,14 +290,14 @@ if (typeof jQuery === 'undefined') {
       strategy.search(term, function (data, stillSearching) {
         if (!self.dropdown.shown) {
           self.dropdown.activate();
-          self.dropdown.setPosition(self.adapter.getCaretPosition());
         }
         if (self._clearAtNext) {
           // The first callback in the current lock.
           self.dropdown.clear();
           self._clearAtNext = false;
         }
-        self.dropdown.render(self._zip(data, strategy));
+        self.dropdown.setPosition(self.adapter.getCaretPosition());
+        self.dropdown.render(self._zip(data, strategy, term));
         if (!stillSearching) {
           // The last callback in the current lock.
           free();
@@ -290,9 +312,9 @@ if (typeof jQuery === 'undefined') {
     //
     //  this._zip(['a', 'b'], 's');
     //  //=> [{ value: 'a', strategy: 's' }, { value: 'b', strategy: 's' }]
-    _zip: function (data, strategy) {
+    _zip: function (data, strategy, term) {
       return $.map(data, function (value) {
-        return { value: value, strategy: strategy };
+        return { value: value, strategy: strategy, term: term };
       });
     }
   });
@@ -302,6 +324,8 @@ if (typeof jQuery === 'undefined') {
 
 +function ($) {
   'use strict';
+
+  var $window = $(window);
 
   var include = function (zippedData, datum) {
     var i, elem;
@@ -343,7 +367,7 @@ if (typeof jQuery === 'undefined') {
   //
   // element - Textarea or contenteditable element.
   function Dropdown(element, completer, option) {
-    this.$el       = Dropdown.findOrCreateElement(option);
+    this.$el       = Dropdown.createElement(option);
     this.completer = completer;
     this.id        = completer.id + 'dropdown';
     this._data     = []; // zipped data.
@@ -354,7 +378,7 @@ if (typeof jQuery === 'undefined') {
     if (option.listPosition) { this.setPosition = option.listPosition; }
     if (option.height) { this.$el.height(option.height); }
     var self = this;
-    $.each(['maxCount', 'placement', 'footer', 'header', 'className'], function (_i, name) {
+    $.each(['maxCount', 'placement', 'footer', 'header', 'noResultsMessage', 'className'], function (_i, name) {
       if (option[name] != null) { self[name] = option[name]; }
     });
     this._bindEvents(element);
@@ -365,18 +389,19 @@ if (typeof jQuery === 'undefined') {
     // Class methods
     // -------------
 
-    findOrCreateElement: function (option) {
+    createElement: function (option) {
       var $parent = option.appendTo;
       if (!($parent instanceof $)) { $parent = $($parent); }
-      var $el = $parent.children('.dropdown-menu')
-      if (!$el.length) {
-        $el = $('<ul class="dropdown-menu"></ul>').css({
+      var $el = $('<ul></ul>')
+        .addClass('dropdown-menu textcomplete-dropdown')
+        .attr('id', 'textcomplete-dropdown-' + option._oid)
+        .css({
           display: 'none',
           left: 0,
           position: 'absolute',
           zIndex: option.zIndex
-        }).appendTo($parent);
-      }
+        })
+        .appendTo($parent);
       return $el;
     }
   });
@@ -419,9 +444,12 @@ if (typeof jQuery === 'undefined') {
         this._renderFooter(unzippedData);
         if (contentsHtml) {
           this._renderContents(contentsHtml);
+          this._fitToBottom();
           this._activateIndexedItem();
         }
         this._setScroll();
+      } else if (this.noResultsMessage) {
+        this._renderNoResultsMessage(unzippedData);
       } else if (this.shown) {
         this.deactivate();
       }
@@ -452,7 +480,7 @@ if (typeof jQuery === 'undefined') {
       this.$el.html('');
       this.data = [];
       this._index = 0;
-      this._$header = this._$footer = null;
+      this._$header = this._$footer = this._$noResultsMessage = null;
     },
 
     activate: function () {
@@ -507,13 +535,15 @@ if (typeof jQuery === 'undefined') {
     _data:    null,  // Currently shown zipped data.
     _index:   null,
     _$header: null,
+    _$noResultsMessage: null,
     _$footer: null,
 
     // Private methods
     // ---------------
 
     _bindEvents: function () {
-      this.$el.on('mousedown.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this))
+      this.$el.on('mousedown.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this));
+      this.$el.on('touchstart.' + this.id, '.textcomplete-item', $.proxy(this._onClick, this));
       this.$el.on('mouseover.' + this.id, '.textcomplete-item', $.proxy(this._onMouseover, this));
       this.$inputEl.on('keydown.' + this.id, $.proxy(this._onKeydown, this));
     },
@@ -530,7 +560,12 @@ if (typeof jQuery === 'undefined') {
       var self = this;
       // Deactive at next tick to allow other event handlers to know whether
       // the dropdown has been shown or not.
-      setTimeout(function () { self.deactivate(); }, 0);
+      setTimeout(function () {
+        self.deactivate();
+        if (e.type === 'touchstart') {
+          self.$inputEl.focus();
+        }
+      }, 0);
     },
 
     // Activate hovered item.
@@ -687,7 +722,7 @@ if (typeof jQuery === 'undefined') {
         index = this.data.length;
         this.data.push(datum);
         html += '<li class="textcomplete-item" data-index="' + index + '"><a>';
-        html +=   datum.strategy.template(datum.value);
+        html +=   datum.strategy.template(datum.value, datum.term);
         html += '</a></li>';
       }
       return html;
@@ -713,11 +748,29 @@ if (typeof jQuery === 'undefined') {
       }
     },
 
+    _renderNoResultsMessage: function (unzippedData) {
+      if (this.noResultsMessage) {
+        if (!this._$noResultsMessage) {
+          this._$noResultsMessage = $('<li class="textcomplete-no-results-message"></li>').appendTo(this.$el);
+        }
+        var html = $.isFunction(this.noResultsMessage) ? this.noResultsMessage(unzippedData) : this.noResultsMessage;
+        this._$noResultsMessage.html(html);
+      }
+    },
+
     _renderContents: function (html) {
       if (this._$footer) {
         this._$footer.before(html);
       } else {
         this.$el.append(html);
+      }
+    },
+
+    _fitToBottom: function() {
+      var windowScrollBottom = $window.scrollTop() + $window.height();
+      var height = this.$el.height();
+      if ((this.$el.position().top + height) > windowScrollBottom) {
+        this.$el.offset({top: windowScrollBottom - height});
       }
     },
 
@@ -771,9 +824,12 @@ if (typeof jQuery === 'undefined') {
     if (this.cache) { this.search = memoize(this.search); }
   }
 
-  Strategy.parse = function (optionsArray) {
-    return $.map(optionsArray, function (options) {
-      return new Strategy(options);
+  Strategy.parse = function (strategiesArray, params) {
+    return $.map(strategiesArray, function (strategy) {
+      var strategyObj = new Strategy(strategy);
+      strategyObj.el = params.el;
+      strategyObj.$el = params.$el;
+      return strategyObj;
     });
   };
 
@@ -1166,8 +1222,6 @@ if (typeof jQuery === 'undefined') {
       position.top += $node.height() - this.$el.offset().top;
       position.lineHeight = $node.height();
       $node.remove();
-      var dir = this.$el.attr('dir') || this.$el.css('direction');
-      if (dir === 'rtl') { position.left -= this.listView.$el.width(); }
       return position;
     },
 
@@ -1189,3 +1243,6 @@ if (typeof jQuery === 'undefined') {
 
   $.fn.textcomplete.ContentEditable = ContentEditable;
 }(jQuery);
+
+return jQuery;
+}));

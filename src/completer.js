@@ -176,6 +176,7 @@
     // strategy - The Strategy object.
     // e        - Click or keydown event object.
     select: function (value, strategy, e) {
+      this._term = null;
       this.adapter.select(value, strategy, e);
       this.fire('change').fire('textComplete:select', value, strategy);
       this.adapter.focus();
@@ -214,14 +215,14 @@
       strategy.search(term, function (data, stillSearching) {
         if (!self.dropdown.shown) {
           self.dropdown.activate();
-          self.dropdown.setPosition(self.adapter.getCaretPosition());
         }
         if (self._clearAtNext) {
           // The first callback in the current lock.
           self.dropdown.clear();
           self._clearAtNext = false;
         }
-        self.dropdown.render(self._zip(data, strategy));
+        self.dropdown.setPosition(self.adapter.getCaretPosition());
+        self.dropdown.render(self._zip(data, strategy, term));
         if (!stillSearching) {
           // The last callback in the current lock.
           free();
@@ -236,9 +237,9 @@
     //
     //  this._zip(['a', 'b'], 's');
     //  //=> [{ value: 'a', strategy: 's' }, { value: 'b', strategy: 's' }]
-    _zip: function (data, strategy) {
+    _zip: function (data, strategy, term) {
       return $.map(data, function (value) {
-        return { value: value, strategy: strategy };
+        return { value: value, strategy: strategy, term: term };
       });
     }
   });
